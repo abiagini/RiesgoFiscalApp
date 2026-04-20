@@ -1,0 +1,212 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:RiesgoFiscalApp.ViewModels"
+        x:Class="RiesgoFiscalApp.MainWindow"
+        Title="Aura Banking - Onboarding Inteligente" Height="850" Width="1200"
+        WindowStartupLocation="CenterScreen"
+        Background="#F4F7FB"
+        FontFamily="Inter, Segoe UI, sans-serif">
+    
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+
+    <Grid>
+        <!-- FONDO DECORATIVO PARA ONBOARDING -->
+        <Border Background="#0052CC" Height="300" VerticalAlignment="Top" IsVisible="{Binding ShowOnboarding}">
+             <TextBlock Text="Aura Banking" Foreground="White" Opacity="0.1" FontSize="120" FontWeight="Black" Margin="20"/>
+        </Border>
+
+        <!-- VISTA DE ONBOARDING -->
+        <Grid IsVisible="{Binding ShowOnboarding}" Margin="40,60,40,40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel HorizontalAlignment="Center" Margin="0,0,0,30">
+                <TextBlock Text="Configuración de Cuenta" FontSize="32" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                <TextBlock Text="Complete los datos para que nuestros agentes de IA validen su perfil." Foreground="#CCD9FF" FontSize="16" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <Border Grid.Row="1" Classes="Card" MaxWidth="1000" VerticalAlignment="Top">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.2*"/>
+                        <ColumnDefinition Width="1.5*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Sección de Datos -->
+                    <StackPanel Grid.Column="0" Margin="10,0,30,0">
+                        <TextBlock Text="1. Información del Titular" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,20" Foreground="#333"/>
+                        <Label Content="Nombre Completo" FontSize="12" Foreground="Gray"/>
+                        <TextBox Text="{Binding CurrentCustomer.Nombre}" Watermark="Ej: Enzo Francescoli"/>
+                        
+                        <Label Content="CUIT / CUIL" FontSize="12" Foreground="Gray"/>
+                        <TextBox Text="{Binding CurrentCustomer.CuitCuil}" Watermark="20-XXXXXXXX-X"/>
+                        
+                        <Label Content="Clasificación Fiscal" FontSize="12" Foreground="Gray"/>
+                        <ComboBox ItemsSource="{Binding CustomerTypes}" SelectedItem="{Binding CurrentCustomer.Clasificacion}" HorizontalAlignment="Stretch" Margin="0,0,0,15"/>
+                        
+                        <Label Content="Monto Estimado Operaciones ($)" FontSize="12" Foreground="Gray"/>
+                        <NumericUpDown Value="{Binding CurrentCustomer.MontoOperado}" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Documentación Complementaria" FontSize="14" FontWeight="SemiBold" Margin="0,10,0,10" Foreground="#555"/>
+                        <Button Content="Adjuntar Recibo de Sueldo" Command="{Binding AddDocumentCommand}" CommandParameter="Recibo Sueldo" HorizontalAlignment="Stretch" Margin="0,0,0,5" Background="#F0F4FF" Foreground="#0052CC"/>
+                        <Button Content="Adjuntar DDJJ" Command="{Binding AddDocumentCommand}" CommandParameter="DDJJ" HorizontalAlignment="Stretch" Margin="0,0,0,15" Background="#F0F4FF" Foreground="#0052CC"/>
+                        
+                        <TextBlock Text="Archivos adjuntos:" FontSize="12" FontStyle="Italic" Margin="0,0,0,5"/>
+                        <ListBox ItemsSource="{Binding Documents}" Height="80" Background="#F9FAFC" CornerRadius="6">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📄 "/>
+                                        <TextBlock Text="{Binding FileName}" Foreground="#333"/>
+                                        <TextBlock Text="{Binding Tipo, StringFormat=' ({0})'}" Foreground="Gray" FontSize="11" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+
+                    <!-- Sección de Análisis con IA -->
+                    <Border Grid.Column="1" Background="#F9FAFC" CornerRadius="8" Padding="25">
+                        <StackPanel>
+                            <TextBlock Text="2. Análisis de Inteligencia Artificial" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10" Foreground="#333"/>
+                            
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,20">
+                                <StackPanel>
+                                    <TextBlock Text="Seleccionar Motor de IA" FontSize="12" Foreground="Gray"/>
+                                    <ComboBox ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}" HorizontalAlignment="Stretch" Margin="0,5,10,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="Primary" Content="Analizar Perfil" Command="{Binding EvaluateCommand}" VerticalAlignment="Bottom" Height="40"/>
+                            </Grid>
+
+                            <Separator Margin="0,0,0,20"/>
+
+                            <!-- Consola de Estado -->
+                            <Border Background="#E6EEFF" Padding="15" CornerRadius="6" BorderBrush="#CCE0FF" BorderThickness="1" Margin="0,0,0,20">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🤖" FontSize="20" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#0040A6" FontSize="13" FontWeight="Medium"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Resultados Estilizados -->
+                            <StackPanel IsVisible="{Binding AssessmentResult, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Border Background="White" BorderBrush="#EEE" BorderThickness="1" CornerRadius="10" Padding="15">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel>
+                                            <TextBlock Text="DICTAMEN PRELIMINAR" FontSize="10" FontWeight="Bold" Foreground="Gray" Margin="0,0,0,5"/>
+                                            <TextBlock Text="{Binding AssessmentResult.DictamenPreliminar}" FontSize="20" FontWeight="Black" Foreground="#0052CC"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="#E6FFFA" CornerRadius="20" Padding="15,5">
+                                             <TextBlock Text="{Binding AssessmentResult.ScoreRiesgo, StringFormat='Score: {0}'}" Foreground="#2D3748" FontWeight="Bold"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <TextBlock Text="OBSERVACIONES DEL AGENTE ANALISTA" FontSize="10" FontWeight="Bold" Foreground="Gray" Margin="0,20,0,5"/>
+                                <TextBlock Text="{Binding AssessmentResult.Observaciones}" TextWrapping="Wrap" FontSize="13" LineHeight="20" Foreground="#4A5568"/>
+                                
+                                <Button Classes="Primary" Content="ACTIVAR MI CUENTA AURA" 
+                                        Command="{Binding FinishOnboardingCommand}" 
+                                        IsVisible="{Binding CanUnlockFeatures}"
+                                        Background="#10B981" Margin="0,30,0,0" Height="55" HorizontalAlignment="Stretch" FontSize="18" HorizontalContentAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- VISTA DE DASHBOARD -->
+        <Grid IsVisible="{Binding IsOnboarded}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sidebar -->
+            <Border Background="#001529">
+                <StackPanel Margin="20">
+                    <TextBlock Text="AURA" Foreground="White" FontSize="28" FontWeight="Black" Margin="0,20,0,40" HorizontalAlignment="Center"/>
+                    
+                    <Button Content="🏠 Dashboard" HorizontalAlignment="Stretch" Background="Transparent" Foreground="#A6ADB4" Padding="15" Margin="0,5"/>
+                    <Button Content="🏦 Inversiones" HorizontalAlignment="Stretch" Background="Transparent" Foreground="#A6ADB4" Padding="15" Margin="0,5"/>
+                    <Button Content="💰 Depósitos" HorizontalAlignment="Stretch" Background="Transparent" Foreground="#A6ADB4" Padding="15" Margin="0,5"/>
+                    <Button Content="💳 Tarjetas" HorizontalAlignment="Stretch" Background="Transparent" Foreground="#A6ADB4" Padding="15" Margin="0,5"/>
+                    <Button Content="⚙️ Configuración" HorizontalAlignment="Stretch" Background="Transparent" Foreground="#A6ADB4" Padding="15" Margin="0,40,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Column="1" Margin="40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <HeaderedContentControl Grid.Row="0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding CurrentCustomer.Nombre, StringFormat='Hola, {0}'}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,15,0"/>
+                        <Border Width="40" Height="40" CornerRadius="20" Background="#0052CC">
+                             <TextBlock Text="👤" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White"/>
+                        </Border>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <StackPanel Grid.Row="1" Margin="0,20,0,40">
+                    <TextBlock Text="Resumen de cuenta" FontSize="32" FontWeight="Bold" Foreground="#1F2937"/>
+                    <TextBlock Text="Estado: Cuenta Validada por IA" Foreground="#059669" FontWeight="SemiBold"/>
+                </StackPanel>
+
+                <!-- Cards Grid -->
+                <UniformGrid Grid.Row="2" Columns="3" Rows="2">
+                    <Border Classes="Card">
+                        <StackPanel VerticalAlignment="Center">
+                             <TextBlock Text="Disponible" Foreground="Gray" FontSize="14"/>
+                             <TextBlock Text="$ 1,240,500.00" FontSize="24" FontWeight="Bold" Margin="0,5,0,15"/>
+                             <ProgressBar Value="30" Height="4" Foreground="#0052CC" Background="#E5E7EB"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Card" Background="#0052CC">
+                        <StackPanel VerticalAlignment="Center">
+                             <TextBlock Text="Rendimiento Inversiones" Foreground="#B3CCFF" FontSize="14"/>
+                             <TextBlock Text="+ 12.4% (Mensual)" FontSize="24" FontWeight="Bold" Foreground="White" Margin="0,5,0,15"/>
+                             <Button Content="Optimizar con IA" Background="White" Foreground="#0052CC" FontSize="12" CornerRadius="20" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Card">
+                         <StackPanel VerticalAlignment="Center">
+                             <TextBlock Text="Límite Operativo IA" Foreground="Gray" FontSize="14"/>
+                             <TextBlock Text="{Binding CurrentCustomer.LimiteOperativoEstimado, StringFormat='$ {0:N0}'}" FontSize="24" FontWeight="Bold" Margin="0,5,0,0"/>
+                             <TextBlock Text="Basado en perfil fiscal validado" FontSize="11" Foreground="#059669" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Acciones Rápidas -->
+                    <Border Grid.ColumnSpan="2" Classes="Card">
+                        <Grid ColumnDefinitions="*,*,*">
+                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                <Button Width="60" Height="60" CornerRadius="30" Background="#F3F4F6" Content="💸" FontSize="24" HorizontalContentAlignment="Center"/>
+                                <TextBlock Text="Transferir" HorizontalAlignment="Center" Margin="0,10,0,0" FontSize="12"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                <Button Width="60" Height="60" CornerRadius="30" Background="#F3F4F6" Content="💹" FontSize="24" HorizontalContentAlignment="Center"/>
+                                <TextBlock Text="Invertir" HorizontalAlignment="Center" Margin="0,10,0,0" FontSize="12"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                <Button Width="60" Height="60" CornerRadius="30" Background="#F3F4F6" Content="🧾" FontSize="24" HorizontalContentAlignment="Center"/>
+                                <TextBlock Text="Pagar" HorizontalAlignment="Center" Margin="0,10,0,0" FontSize="12"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </UniformGrid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
