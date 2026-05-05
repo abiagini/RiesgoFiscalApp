@@ -21,7 +21,7 @@ namespace RiesgoFiscalApp.ViewModels
         private Customer _currentCustomer;
         private RiskAssessment? _assessmentResult;
         private bool _isBusy;
-        private string _statusMessage;
+        private string _statusMessage = string.Empty;
         private string _selectedModel;
         private bool _isOnboarded = false;
         private bool _canUnlockFeatures = false;
@@ -31,8 +31,8 @@ namespace RiesgoFiscalApp.ViewModels
             _agentService = new OpenAIAgentService();
             _currentCustomer = new Customer { Clasificacion = "PF - Monotributista" };
             CustomerTypes = new List<string> { "PF - Monotributista", "PF - Responsable Inscripto", "PJ" };
-            AvailableModels = new List<string> { "OpenAI GPT-4o", "OpenAI GPT-3.5 Turbo", "Gemini 1.5 Pro", "Claude 3.5 Sonnet" };
-            _selectedModel = "OpenAI GPT-4o";
+            AvailableModels = new List<string> { "Gemini 3 Flash Preview", "OpenAI GPT-4o", "Claude 3.5 Sonnet" };
+            _selectedModel = "Gemini 3 Flash Preview";
             Documents = new ObservableCollection<Document>();
             StatusMessage = "Complete todos los campos requeridos para habilitar el análisis.";
             

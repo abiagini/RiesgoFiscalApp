@@ -1,4 +1,5 @@
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/RiesgoFiscalApp
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/appsettings.json
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/RiesgoFiscalApp.deps.json
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/RiesgoFiscalApp.runtimeconfig.json
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/RiesgoFiscalApp.dll
@@ -24,6 +25,14 @@
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Avalonia.X11.dll
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/HarfBuzzSharp.dll
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/MicroCom.Runtime.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.Abstractions.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.FileExtensions.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.Json.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.FileProviders.Abstractions.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.FileProviders.Physical.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.FileSystemGlobbing.dll
+/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Primitives.dll
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Newtonsoft.Json.dll
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/SkiaSharp.dll
 /Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/System.IO.Pipelines.dll
@@ -60,6 +69,7 @@
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/RiesgoFiscalApp.AssemblyInfoInputs.cache
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/RiesgoFiscalApp.AssemblyInfo.cs
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/RiesgoFiscalApp.csproj.CoreCompileInputs.cache
+/Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/RiesgoFiscalApp.sourcelink.json
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/Avalonia/references
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/Avalonia/original.dll
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/Avalonia/original.pdb
@@ -70,12 +80,3 @@
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/RiesgoFi.5BB302BC.Up2Date
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/RiesgoFiscalApp.genruntimeconfig.cache
 /Users/abiagini/code/RiesgoFiscalApp/obj/Debug/net8.0/ref/RiesgoFiscalApp.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.Abstractions.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.FileExtensions.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Configuration.Json.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.FileProviders.Abstractions.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.FileProviders.Physical.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.FileSystemGlobbing.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/Microsoft.Extensions.Primitives.dll
-/Users/abiagini/code/RiesgoFiscalApp/bin/Debug/net8.0/appsettings.json
