@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RiesgoFiscalApp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ab3fd79e0cc5e2cebd29f187e5a822da70ee6b22")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5a4265fc766d40c8c91001fb5bb8979becf075ed")]
 [assembly: System.Reflection.AssemblyProductAttribute("RiesgoFiscalApp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RiesgoFiscalApp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

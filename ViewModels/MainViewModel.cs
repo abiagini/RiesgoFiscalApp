@@ -31,7 +31,12 @@ namespace RiesgoFiscalApp.ViewModels
             _agentService = new OpenAIAgentService();
             
             Documents = new ObservableCollection<Document>();
-            CustomerTypes = new List<string> { "PF - Monotributista", "PF - Responsable Inscripto", "Persona Jurídica (S.A./S.R.L.)" };
+            CustomerTypes = new List<string> { 
+                "PF - Monotributista", 
+                "PF - Responsable Inscripto", 
+                "PF - Relación Dependencia",
+                "Persona Jurídica (S.A./S.R.L.)" 
+            };
             AvailableModels = new List<string> { "Gemini 3 Flash Preview", "OpenAI GPT-4o", "Claude 3.5 Sonnet" };
             _selectedModel = "Gemini 3 Flash Preview";
             
@@ -39,8 +44,8 @@ namespace RiesgoFiscalApp.ViewModels
             AddDocumentCommand = new RelayCommand(async param => await PickAndAddDocumentAsync(param as string));
             FinishOnboardingCommand = new RelayCommand(_ => IsOnboarded = true, _ => CanUnlockFeatures);
 
-            CurrentCustomer = new Customer { Clasificacion = "PF - Monotributista", IsJuridica = false };
-            StatusMessage = "Seleccione el tipo de persona para comenzar.";
+            CurrentCustomer = new Customer { Clasificacion = "PF - Monotributista" };
+            StatusMessage = "Seleccione su perfil fiscal para ver los requisitos.";
         }
 
         public List<string> CustomerTypes { get; }
@@ -79,12 +84,20 @@ namespace RiesgoFiscalApp.ViewModels
             }
         }
 
+        public bool IsMonotributista => CurrentCustomer?.Clasificacion == "PF - Monotributista";
+        public bool IsResponsableInscripto => CurrentCustomer?.Clasificacion == "PF - Responsable Inscripto";
+        public bool IsRelacionDependencia => CurrentCustomer?.Clasificacion == "PF - Relación Dependencia";
+        public bool IsPersonaJuridica => CurrentCustomer?.Clasificacion == "Persona Jurídica (S.A./S.R.L.)";
+
         private void OnCustomerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(Customer.Clasificacion))
             {
-                CurrentCustomer.IsJuridica = CurrentCustomer.Clasificacion.Contains("Jurídica");
-                Documents.Clear(); // Limpiamos docs al cambiar tipo de persona
+                Documents.Clear(); // Reiniciamos docs al cambiar de perfil
+                OnPropertyChanged(nameof(IsMonotributista));
+                OnPropertyChanged(nameof(IsResponsableInscripto));
+                OnPropertyChanged(nameof(IsRelacionDependencia));
+                OnPropertyChanged(nameof(IsPersonaJuridica));
             }
             ValidateInputs();
         }
@@ -117,22 +130,29 @@ namespace RiesgoFiscalApp.ViewModels
         {
             if (Documents == null || _currentCustomer == null) return false;
             
-            if (CurrentCustomer.IsJuridica)
+            bool hasDdjj = Documents.Any(d => d.Tipo == "DDJJ");
+            if (!hasDdjj || !CurrentCustomer.AceptaDeclaracionJurada) return false;
+
+            switch (CurrentCustomer.Clasificacion)
             {
-                bool hasEstatuto = Documents.Any(d => d.Tipo == "Estatuto");
-                bool hasIva = Documents.Any(d => d.Tipo == "Posición IVA");
-                bool hasBalance = Documents.Any(d => d.Tipo == "Balance");
-                return !IsBusy && !string.IsNullOrWhiteSpace(CurrentCustomer.RazonSocial) && 
-                       !string.IsNullOrWhiteSpace(CurrentCustomer.CuitCuil) &&
-                       hasEstatuto && hasIva && hasBalance && CurrentCustomer.AceptaDeclaracionJurada;
-            }
-            else
-            {
-                bool hasRecibo = Documents.Any(d => d.Tipo == "Recibo Sueldo");
-                bool hasDdjj = Documents.Any(d => d.Tipo == "DDJJ");
-                return !IsBusy && !string.IsNullOrWhiteSpace(CurrentCustomer.Nombre) && 
-                       !string.IsNullOrWhiteSpace(CurrentCustomer.CuitCuil) &&
-                       hasRecibo && hasDdjj && CurrentCustomer.AceptaDeclaracionJurada;
+                case "PF - Monotributista":
+                    return Documents.Any(d => d.Tipo == "Comprobante Monotributo") && 
+                           Documents.Count(d => d.Tipo == "Factura") >= 3;
+
+                case "PF - Responsable Inscripto":
+                    return Documents.Count(d => d.Tipo == "Posición IVA") >= 3 && 
+                           Documents.Any(d => d.Tipo == "Autónomo") &&
+                           Documents.Any(d => d.Tipo == "Factura");
+
+                case "PF - Relación Dependencia":
+                    return Documents.Any(d => d.Tipo == "Recibo Sueldo");
+
+                case "Persona Jurídica (S.A./S.R.L.)":
+                    return Documents.Any(d => d.Tipo == "Estatuto") && 
+                           Documents.Count(d => d.Tipo == "Posición IVA") >= 3;
+
+                default:
+                    return false;
             }
         }
 
@@ -143,30 +163,31 @@ namespace RiesgoFiscalApp.ViewModels
 
             if (!IsBusy && _currentCustomer != null)
             {
-                if (CanAnalyze())
+                var missing = new List<string>();
+                if (!Documents.Any(d => d.Tipo == "DDJJ")) missing.Add("DDJJ");
+
+                switch (CurrentCustomer.Clasificacion)
                 {
-                    StatusMessage = "Requisitos completos. Inicie el análisis de IA.";
+                    case "PF - Monotributista":
+                        if (!Documents.Any(d => d.Tipo == "Comprobante Monotributo")) missing.Add("Comprobante Monotributo");
+                        int facturas = Documents.Count(d => d.Tipo == "Factura");
+                        if (facturas < 3) missing.Add($"Facturas ({facturas}/3)");
+                        break;
+
+                    case "PF - Responsable Inscripto":
+                        int ivas = Documents.Count(d => d.Tipo == "Posición IVA");
+                        if (ivas < 3) missing.Add($"Posiciones IVA ({ivas}/3)");
+                        if (!Documents.Any(d => d.Tipo == "Autónomo")) missing.Add("Credencial Autónomo");
+                        if (!Documents.Any(d => d.Tipo == "Factura")) missing.Add("Factura");
+                        break;
+
+                    case "PF - Relación Dependencia":
+                        if (!Documents.Any(d => d.Tipo == "Recibo Sueldo")) missing.Add("Recibo Sueldo");
+                        break;
                 }
-                else
-                {
-                    var missing = new List<string>();
-                    if (CurrentCustomer.IsJuridica)
-                    {
-                        if (string.IsNullOrWhiteSpace(CurrentCustomer.RazonSocial)) missing.Add("Razón Social");
-                        if (string.IsNullOrWhiteSpace(CurrentCustomer.CuitCuil)) missing.Add("CUIT");
-                        if (!Documents.Any(d => d.Tipo == "Estatuto")) missing.Add("Estatuto");
-                        if (!Documents.Any(d => d.Tipo == "Posición IVA")) missing.Add("Posición IVA");
-                    }
-                    else
-                    {
-                        if (string.IsNullOrWhiteSpace(CurrentCustomer.Nombre)) missing.Add("Nombre");
-                        if (string.IsNullOrWhiteSpace(CurrentCustomer.CuitCuil)) missing.Add("CUIT");
-                        if (!Documents.Any(d => d.Tipo == "Recibo Sueldo")) missing.Add("Recibo");
-                    }
-                    if (!CurrentCustomer.AceptaDeclaracionJurada) missing.Add("Aceptar DDJJ");
-                    
-                    StatusMessage = "Faltante: " + string.Join(", ", missing);
-                }
+
+                if (missing.Any()) StatusMessage = "Faltante: " + string.Join(", ", missing);
+                else StatusMessage = "Documentación completa. Inicie auditoría.";
             }
         }
 
@@ -179,34 +200,25 @@ namespace RiesgoFiscalApp.ViewModels
 
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = $"Seleccionar {docType} (PDF)",
-                AllowMultiple = false,
+                Title = $"Adjuntar {docType} (PDF)",
+                AllowMultiple = true,
                 FileTypeFilter = new[] { FilePickerFileTypes.Pdf }
             });
 
-            if (files.Count >= 1)
+            foreach (var file in files)
             {
-                var file = files[0];
-                if (!file.Name.ToLower().EndsWith(".pdf"))
-                {
-                    StatusMessage = "Error: Solo se permiten archivos PDF.";
-                    return;
-                }
-
-                // Si ya existe uno del mismo tipo, lo reemplazamos
-                var existing = Documents.FirstOrDefault(d => d.Tipo == docType);
-                if (existing != null) Documents.Remove(existing);
+                if (!file.Name.ToLower().EndsWith(".pdf")) continue;
 
                 Documents.Add(new Document 
                 { 
                     Tipo = docType, 
                     FileName = file.Name,
                     FilePath = file.Path.LocalPath,
-                    ContenidoTexto = $"Archivo '{file.Name}' listo para análisis..." 
+                    ContenidoTexto = "Listo para auditoría..." 
                 });
-                StatusMessage = $"Documento '{docType}' cargado.";
-                ValidateInputs();
             }
+            StatusMessage = $"Documentos cargados exitosamente.";
+            ValidateInputs();
         }
 
         private async Task EvaluateRiskAsync()
@@ -217,32 +229,17 @@ namespace RiesgoFiscalApp.ViewModels
 
             try
             {
-                StatusMessage = "Auditando documentación con Agentes de IA...";
+                StatusMessage = "Agentes de IA auditando perfiles fiscales...";
                 var docList = new List<Document>(Documents);
                 CurrentCustomer = await _agentService.ExtractDataFromDocumentsAsync(docList, CurrentCustomer, SelectedModel);
                 OnPropertyChanged(nameof(CurrentCustomer)); 
                 
-                StatusMessage = "Generando dictamen de riesgo...";
                 AssessmentResult = await _agentService.EvaluateRiskAsync(CurrentCustomer, SelectedModel);
-                
-                if (AssessmentResult.DictamenPreliminar == "Cumple")
-                {
-                    StatusMessage = "Validación Exitosa. Perfil aprobado.";
-                    CanUnlockFeatures = true;
-                }
-                else
-                {
-                    StatusMessage = "Rechazado por inconsistencias fiscales/legales.";
-                }
+                StatusMessage = AssessmentResult.DictamenPreliminar == "Cumple" ? "Perfil Aprobado." : "Perfil Rechazado.";
+                CanUnlockFeatures = AssessmentResult.DictamenPreliminar == "Cumple";
             }
-            catch (Exception ex)
-            {
-                StatusMessage = $"❌ ERROR: {ex.Message}";
-            }
-            finally
-            {
-                IsBusy = false;
-            }
+            catch (Exception ex) { StatusMessage = $"❌ ERROR: {ex.Message}"; }
+            finally { IsBusy = false; }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

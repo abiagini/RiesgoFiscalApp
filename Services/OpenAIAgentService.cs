@@ -28,45 +28,80 @@ namespace RiesgoFiscalApp.Services
 
         private (string Url, string Key, string Provider) GetProviderDetails(string modelId)
         {
-            string key = _config["AiConfig:GeminiApiKey"] ?? string.Empty;
+            if (modelId.Contains("OpenAI")) 
+                return ("https://api.openai.com/v1/chat/completions", _config["AiConfig:OpenAIApiKey"] ?? "", "OpenAI");
+            if (modelId.Contains("Claude")) 
+                return ("https://api.anthropic.com/v1/messages", _config["AiConfig:ClaudeApiKey"] ?? "", "Claude");
+            
+            // Gemini (Default)
+            string key = _config["AiConfig:GeminiApiKey"] ?? "";
             return ($"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={key}", key, "Gemini");
+        }
+
+        private object BuildPayload(string provider, string systemPrompt, string userPrompt)
+        {
+            if (provider == "Gemini")
+                return new { contents = new[] { new { parts = new[] { new { text = $"{systemPrompt}\n\nDATOS:\n{userPrompt}" } } } } };
+            
+            return new { 
+                model = "gpt-4o", 
+                messages = new[] { 
+                    new { role = "system", content = systemPrompt }, 
+                    new { role = "user", content = userPrompt } 
+                } 
+            };
+        }
+
+        private string ExtractResponseText(string json, string provider)
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (provider == "Gemini") return doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
+            return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+        }
+
+        private void LogAudit(string url, object payload, string response, string provider)
+        {
+            string jsonReq = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            Console.WriteLine($"\n>>> [CURL DEBUG - {provider}]");
+            Console.WriteLine($"curl -X POST \"{url}\" -H \"Content-Type: application/json\" -d '{jsonReq.Replace("'", "\\'")}'");
+            Console.WriteLine($"\n<<< [HTTP RESPONSE - {provider}]");
+            Console.WriteLine(response);
+            Console.WriteLine("---------------------------------------------------------\n");
         }
 
         public async Task<Customer> ExtractDataFromDocumentsAsync(List<Document> documents, Customer baseCustomer, string modelId)
         {
             var (url, key, provider) = GetProviderDetails(modelId);
-            string allText = "";
-            foreach (var doc in documents) allText += $"--- DOC: {doc.Tipo} ---\n" + ExtractTextFromPdf(doc.FilePath) + "\n";
+            string megaContext = "";
+            foreach (var doc in documents) megaContext += $"--- DOCUMENTO: {doc.Tipo} ({doc.FileName}) ---\n{ExtractText(doc.FilePath)}\n\n";
 
-            var payload = new {
-                contents = new[] {
-                    new {
-                        parts = new[] {
-                            new { text = $"Eres un Auditor Fiscal Argentino. Analiza estos documentos y responde ESTRICTAMENTE en JSON: {{ 'cuit': '...', 'nombre': '...', 'ingreso_estimado': 0.0, 'es_pep': bool, 'categoria': '...', 'fecha': 'DD/MM/YYYY' }}. Extrae el ingreso mensual (sueldo neto, o facturación promedio del IVA, o monto de factura C).\n\nDocumentos:\n{allText}" }
-                        }
-                    }
-                }
-            };
+            var payload = BuildPayload(provider, 
+                "Eres un Auditor Fiscal de un Banco Argentino. Analiza TODOS los documentos adjuntos (Facturas, IVAs, Recibos, DDJJ). " +
+                "Extrae y responde ESTRICTAMENTE en JSON: { 'cuit': '...', 'nombre': '...', 'ingreso_mensual': 0.0, 'es_pep': bool, 'categoria': '...', 'alerta_fraude': '...' }. " +
+                "Si hay 3 facturas o 3 IVAs, calcula el promedio mensual de ingresos.", 
+                megaContext);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Add("x-goog-api-key", key);
-            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            if (provider == "Gemini") request.Headers.Add("x-goog-api-key", key);
+            else request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
             
+            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
             var response = await _httpClient.SendAsync(request);
             var result = await response.Content.ReadAsStringAsync();
-            
-            using var docRes = JsonDocument.Parse(result);
-            string aiText = docRes.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
 
+            LogAudit(url, payload, result, provider);
+
+            if (!response.IsSuccessStatusCode) throw new Exception($"API {provider} Error: {response.StatusCode}");
+
+            string aiText = ExtractResponseText(result, provider);
             try {
                 var json = aiText.Substring(aiText.IndexOf("{"), aiText.LastIndexOf("}") - aiText.IndexOf("{") + 1);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
                 baseCustomer.CuitExtraido = data.GetProperty("cuit").GetString() ?? "";
                 baseCustomer.NombreExtraido = data.GetProperty("nombre").GetString() ?? "";
-                baseCustomer.IngresoMensualValidado = data.GetProperty("ingreso_estimado").GetDecimal();
+                baseCustomer.IngresoMensualValidado = data.GetProperty("ingreso_mensual").GetDecimal();
                 baseCustomer.EsPepDocumento = data.GetProperty("es_pep").GetBoolean();
                 baseCustomer.CategoriaMonotributo = data.GetProperty("categoria").GetString() ?? "";
-                baseCustomer.FechaDocumento = data.GetProperty("fecha").GetString() ?? "";
             } catch { }
 
             return baseCustomer;
@@ -74,46 +109,32 @@ namespace RiesgoFiscalApp.Services
 
         public async Task<RiskAssessment> EvaluateRiskAsync(Customer customer, string modelId)
         {
+            // El scoring se calcula localmente para asegurar cumplimiento de reglas de negocio
             int score = 100;
             var logs = new List<string>();
 
-            // 1. Regla Identidad
             if (customer.CuitCuil.Replace("-","") != customer.CuitExtraido.Replace("-",""))
-                return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "Error de Identidad: CUIT no coincide con los documentos." };
+                return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "BLOQUEO: El CUIT de los documentos no coincide con el declarado." };
 
-            // 2. Regla PEP
             if (customer.EsPep != customer.EsPepDocumento)
-                return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "Inconsistencia PEP: Declaración jurada no coincide con el perfil detectado." };
-            if (customer.EsPep) { score -= 40; logs.Add("Perfil PEP: Riesgo Incrementado (-40)."); }
+                return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "RECHAZO: Declaración PEP inconsistente contra DDJJ." };
 
-            // 3. Capacidad Económica por Perfil
+            if (customer.EsPep) { score -= 40; logs.Add("Perfil PEP detectado."); }
+
             if (customer.IngresoMensualValidado > 0) {
                 decimal ratio = customer.MontoOperado / customer.IngresoMensualValidado;
-                if (ratio > 4) { score -= 60; logs.Add("Alerta AML: El monto operado supera excesivamente el ingreso mensual (-60)."); }
-                else if (ratio > 2) { score -= 20; logs.Add("Precaución: Monto operado elevado vs ingresos (-20)."); }
-            }
-
-            // 4. Reglas específicas de Argentina
-            if (customer.Clasificacion.Contains("Monotributista") && customer.MontoOperado > 3000000) {
-                score -= 30; logs.Add("Monotributo: Monto operado cerca de límites de exclusión (-30).");
+                if (ratio > 5) { score -= 60; logs.Add("Alerta AML: Monto excede capacidad de ingresos."); }
             }
 
             if (score < 1) score = 1;
             string dictamen = score >= 70 ? "Cumple" : (score >= 40 ? "Cumple con Observaciones" : "No cumple");
 
-            return new RiskAssessment {
-                ScoreRiesgo = score,
-                DictamenPreliminar = dictamen,
-                Observaciones = logs.Any() ? string.Join(" | ", logs) : "Perfil validado con éxito."
-            };
+            return new RiskAssessment { ScoreRiesgo = score, DictamenPreliminar = dictamen, Observaciones = logs.Any() ? string.Join(" | ", logs) : "Auditoría finalizada con éxito." };
         }
 
-        private string ExtractTextFromPdf(string path) {
-            try {
-                using (var pdf = PdfDocument.Open(path)) {
-                    return string.Join(" ", pdf.GetPages().Select(p => p.Text));
-                }
-            } catch { return ""; }
+        private string ExtractText(string path) {
+            try { using var pdf = PdfDocument.Open(path); return string.Join(" ", pdf.GetPages().Select(p => p.Text)); }
+            catch { return ""; }
         }
     }
 }
