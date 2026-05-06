@@ -26,163 +26,124 @@ namespace RiesgoFiscalApp.Services
                 .Build();
         }
 
+        private string Normalize(string text) => new string(text?.Where(char.IsLetterOrDigit).ToArray()).ToLower() ?? "";
+
         private (string Url, string Key, string Provider) GetProviderDetails(string modelId)
         {
-            if (modelId.Contains("OpenAI")) 
-                return ("https://api.openai.com/v1/chat/completions", _config["AiConfig:OpenAIApiKey"] ?? string.Empty, "OpenAI");
-            
-            if (modelId.Contains("Gemini")) 
-            {
-                // Usando gemini-3-flash-preview según requerimiento
-                string key = _config["AiConfig:GeminiApiKey"] ?? string.Empty;
-                return ($"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={key}", key, "Gemini");
-            }
-
-            if (modelId.Contains("Claude")) 
-                return ("https://api.anthropic.com/v1/messages", _config["AiConfig:ClaudeApiKey"] ?? string.Empty, "Claude");
-            
-            throw new Exception($"Motor de IA '{modelId}' no configurado.");
+            if (modelId.Contains("OpenAI")) return ("https://api.openai.com/v1/chat/completions", _config["AiConfig:OpenAIApiKey"] ?? string.Empty, "OpenAI");
+            if (modelId.Contains("Gemini")) return ($"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={_config["AiConfig:GeminiApiKey"]}", _config["AiConfig:GeminiApiKey"] ?? string.Empty, "Gemini");
+            if (modelId.Contains("Claude")) return ("https://api.anthropic.com/v1/messages", _config["AiConfig:ClaudeApiKey"] ?? string.Empty, "Claude");
+            throw new Exception("Motor no configurado.");
         }
 
         private object BuildPayload(string provider, string systemPrompt, string userPrompt)
         {
-            if (provider == "Gemini")
-            {
-                return new {
-                    contents = new[] {
-                        new {
-                            parts = new[] {
-                                new { text = $"{systemPrompt}\n\nEntrada: {userPrompt}" }
-                            }
-                        }
-                    }
-                };
-            }
-            if (provider == "Claude")
-            {
-                return new {
-                    model = "claude-3-5-sonnet-20240620",
-                    max_tokens = 1024,
-                    system = systemPrompt,
-                    messages = new[] { new { role = "user", content = userPrompt } }
-                };
-            }
-            return new {
-                model = "gpt-4o",
-                messages = new[] { 
-                    new { role = "system", content = systemPrompt },
-                    new { role = "user", content = userPrompt }
-                }
-            };
+            if (provider == "Gemini") return new { contents = new[] { new { parts = new[] { new { text = $"{systemPrompt}\n\nInput: {userPrompt}" } } } } };
+            return new { model = "gpt-4o", messages = new[] { new { role = "system", content = systemPrompt }, new { role = "user", content = userPrompt } } };
         }
 
         private string ExtractResponseText(string jsonResponse, string provider)
         {
             using var doc = JsonDocument.Parse(jsonResponse);
-            if (provider == "Gemini")
-            {
-                if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
-                {
-                    return candidates[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
-                }
-                throw new Exception("La respuesta de Gemini-3 no contiene candidatos válidos.");
-            }
-            if (provider == "Claude")
-                return doc.RootElement.GetProperty("content")[0].GetProperty("text").GetString() ?? "";
-            
+            if (provider == "Gemini") return doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
             return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
-        }
-
-        private void LogAsCurl(string url, string key, object payload, string provider)
-        {
-            string json = JsonSerializer.Serialize(payload);
-            Console.WriteLine($"\n>>> [DOCS-COMPLIANT CURL - {provider}]");
-            Console.WriteLine($"curl -X POST \"{url}\" \\");
-            Console.WriteLine("  -H \"Content-Type: application/json\" \\");
-            if (provider == "Gemini") Console.WriteLine("  -H \"x-goog-api-key: " + key + "\"\n");
-            else if (provider == "Claude") Console.WriteLine("  -H \"x-api-key: " + key + "\" \\ -H \"anthropic-version: 2023-06-01\" \\");
-            else if (provider == "OpenAI") Console.WriteLine("  -H \"Authorization: Bearer " + key + "\" \\");
-            Console.WriteLine($"  -d '{json.Replace("'", "\\'")}'\n");
         }
 
         public async Task<Customer> ExtractDataFromDocumentsAsync(List<Document> documents, Customer baseCustomer, string modelId)
         {
             var (url, key, provider) = GetProviderDetails(modelId);
-            string rawText = ExtractTextFromPdfs(documents);
+            
+            string prompt = "";
+            string context = "";
 
-            if (string.IsNullOrWhiteSpace(rawText))
-                throw new Exception("El PDF no tiene texto legible para extraer.");
+            if (baseCustomer.IsJuridica)
+            {
+                string tEst = ExtractTextFromPdfs(documents.Where(d => d.Tipo == "Estatuto").ToList());
+                string tIva = ExtractTextFromPdfs(documents.Where(d => d.Tipo == "Posición IVA").ToList());
+                string tBal = ExtractTextFromPdfs(documents.Where(d => d.Tipo == "Balance").ToList());
+                
+                context = $"ESTATUTO: {tEst}\nIVA: {tIva}\nBALANCE: {tBal}";
+                prompt = "Eres un Auditor Corporativo. Extrae datos de la empresa y responde en JSON: { 'cuit': '...', 'razon_social': '...', 'representante': '...', 'ventas_mensuales': 0.0, 'es_pep': bool }. Busca el representante legal y si es PEP.";
+            }
+            else
+            {
+                string tRec = ExtractTextFromPdfs(documents.Where(d => d.Tipo == "Recibo Sueldo").ToList());
+                string tDdj = ExtractTextFromPdfs(documents.Where(d => d.Tipo == "DDJJ").ToList());
+                
+                context = $"RECIBO: {tRec}\nDDJJ: {tDdj}";
+                prompt = "Eres un Auditor Bancario. Extrae datos y responde en JSON: { 'cuit': '...', 'nombre': '...', 'sueldo': 0.0, 'es_pep': bool, 'antiguedad_meses': 0 }. Analiza ambos textos.";
+            }
 
-            var payload = BuildPayload(provider, 
-                "Extract the CUIT (format XX-XXXXXXXX-X). Respond ONLY with the CUIT.", 
-                rawText);
-
-            LogAsCurl(url, key, payload, provider);
+            var payload = BuildPayload(provider, prompt, context);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            if (provider == "Gemini") request.Headers.Add("x-goog-api-key", key);
             if (provider == "OpenAI") request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            if (provider == "Claude") {
-                request.Headers.Add("x-api-key", key);
-                request.Headers.Add("anthropic-version", "2023-06-01");
-            }
+            else request.Headers.Add("x-goog-api-key", key);
             
             request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
             var response = await _httpClient.SendAsync(request);
-            string result = await response.Content.ReadAsStringAsync();
+            var result = await response.Content.ReadAsStringAsync();
+            var aiText = ExtractResponseText(result, provider);
 
-            Console.WriteLine($"\n<<< [OFFICIAL API RESPONSE - {provider}]");
-            Console.WriteLine(result);
-            Console.WriteLine("---------------------------------------------------------\n");
+            try {
+                var json = aiText.Substring(aiText.IndexOf("{"), aiText.LastIndexOf("}") - aiText.IndexOf("{") + 1);
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                baseCustomer.CuitExtraidoDeDocumento = data.GetProperty("cuit").GetString() ?? "";
+                baseCustomer.EsPepSegunDocumento = data.GetProperty("es_pep").GetBoolean();
 
-            if (!response.IsSuccessStatusCode)
-                throw new Exception($"API Gemini Error ({response.StatusCode}): {result}");
+                if (baseCustomer.IsJuridica)
+                {
+                    baseCustomer.RazonSocial = data.GetProperty("razon_social").GetString() ?? "";
+                    baseCustomer.RepresentanteLegalNombre = data.GetProperty("representante").GetString() ?? "";
+                    baseCustomer.FacturacionAnual = data.GetProperty("ventas_mensuales").GetDecimal() * 12; // Estimación
+                }
+                else
+                {
+                    baseCustomer.NombreExtraidoRecibo = data.GetProperty("nombre").GetString() ?? "";
+                    baseCustomer.SueldoNetoExtraido = data.GetProperty("sueldo").GetDecimal();
+                    baseCustomer.MesesAntiguedadLaboral = data.GetProperty("antiguedad_meses").GetInt32();
+                }
+            } catch { }
 
-            baseCustomer.CuitExtraidoDeDocumento = ExtractResponseText(result, provider).Trim();
-            baseCustomer.LimiteOperativoEstimado = baseCustomer.MontoOperado * 1.5m;
-            
             return baseCustomer;
         }
 
         public async Task<RiskAssessment> EvaluateRiskAsync(Customer customer, string modelId)
         {
-            var (url, key, provider) = GetProviderDetails(modelId);
-            var payload = BuildPayload(provider,
-                "Analyze risk. Return JSON { 'Dictamen': 'Cumple'|'No cumple' }.",
-                $"CUIT: {customer.CuitExtraidoDeDocumento}, Amount: {customer.MontoOperado}");
+            int score = 100;
+            var logs = new List<string>();
 
-            LogAsCurl(url, key, payload, provider);
+            // 1. REGLA IDENTIDAD (KILLER)
+            string declaredName = customer.IsJuridica ? customer.RazonSocial : customer.Nombre;
+            string extractedName = customer.IsJuridica ? customer.RazonSocial : customer.NombreExtraidoRecibo;
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            if (provider == "Gemini") request.Headers.Add("x-goog-api-key", key);
-            if (provider == "OpenAI") request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            if (provider == "Claude") {
-                request.Headers.Add("x-api-key", key);
-                request.Headers.Add("anthropic-version", "2023-06-01");
+            if (Normalize(declaredName) != Normalize(extractedName))
+                return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "FRAUDE: El nombre o razón social no coincide con la documentación." };
+
+            // 2. REGLA PEP (COMPLIANCE)
+            if (customer.EsPep != customer.EsPepSegunDocumento)
+                return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "RECHAZO: Declaración de PEP inconsistente con los documentos." };
+            if (customer.EsPep) { score -= 60; logs.Add("PEP detectado (-60)."); }
+
+            // 3. CAPACIDAD ECONÓMICA
+            decimal income = customer.IsJuridica ? customer.FacturacionAnual / 12 : customer.SueldoNetoExtraido;
+            if (income > 0) {
+                if (customer.MontoOperado > income * 5) { score -= 70; logs.Add("AML: Monto operativo sospechoso vs ingresos (-70)."); }
+            } else {
+                score -= 30; logs.Add("ADVERTENCIA: No se pudo determinar capacidad de ingreso (-30).");
             }
 
-            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.SendAsync(request);
-            string result = await response.Content.ReadAsStringAsync();
-
-            Console.WriteLine($"\n<<< [OFFICIAL API RESPONSE - {provider}]");
-            Console.WriteLine(result);
-            Console.WriteLine("---------------------------------------------------------\n");
-
-            if (!response.IsSuccessStatusCode) throw new Exception($"Error en Agente 2 Gemini: {result}");
-
-            string textResult = ExtractResponseText(result, provider);
+            if (score < 1) score = 1;
+            string dictamen = score >= 75 ? "Cumple" : (score >= 45 ? "Cumple con observaciones" : "No cumple");
 
             return new RiskAssessment {
-                DictamenPreliminar = textResult.Contains("Cumple") ? "Cumple" : "No cumple",
-                Observaciones = $"Analizado por Gemini-3-Flash."
+                ScoreRiesgo = score,
+                DictamenPreliminar = dictamen,
+                Observaciones = logs.Any() ? string.Join(" | ", logs) : "Perfil verificado bajo estándares BCRA."
             };
         }
 
-        private string ExtractTextFromPdfs(List<Document> docs)
-        {
+        private string ExtractTextFromPdfs(List<Document> docs) {
             StringBuilder sb = new StringBuilder();
             foreach (var doc in docs) {
                 try {
