@@ -113,17 +113,43 @@ namespace RiesgoFiscalApp.Services
             int score = 100;
             var logs = new List<string>();
 
+            // 1. REGLA NOMBRES (FUZZY MATCHING)
+            string inputName = customer.Nombre?.ToLower().Trim() ?? "";
+            string docName = customer.NombreExtraido?.ToLower().Trim() ?? "";
+
+            if (inputName != docName)
+            {
+                if (string.IsNullOrEmpty(docName) || docName == "not_found")
+                {
+                    score -= 50;
+                    logs.Add("ALERTA: No se pudo verificar la identidad nominal en los documentos (-50 pts).");
+                }
+                else if (docName.Contains(inputName) || inputName.Contains(docName))
+                {
+                    score -= 20;
+                    logs.Add("PRECAUCIÓN: El nombre coincide parcialmente con los documentos (-20 pts).");
+                }
+                else
+                {
+                    score -= 80;
+                    logs.Add("RIESGO CRÍTICO: Discrepancia significativa de nombres entre formulario y documentos (-80 pts).");
+                }
+            }
+
+            // 2. REGLA CUIT (CRÍTICA)
             if (customer.CuitCuil.Replace("-","") != customer.CuitExtraido.Replace("-",""))
                 return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "BLOQUEO: El CUIT de los documentos no coincide con el declarado." };
 
+            // 3. REGLA PEP (COMPLIANCE)
             if (customer.EsPep != customer.EsPepDocumento)
                 return new RiskAssessment { ScoreRiesgo = 1, DictamenPreliminar = "No cumple", Observaciones = "RECHAZO: Declaración PEP inconsistente contra DDJJ." };
 
-            if (customer.EsPep) { score -= 40; logs.Add("Perfil PEP detectado."); }
+            if (customer.EsPep) { score -= 40; logs.Add("Perfil PEP detectado (-40 pts)."); }
 
+            // 4. CAPACIDAD ECONÓMICA
             if (customer.IngresoMensualValidado > 0) {
                 decimal ratio = customer.MontoOperado / customer.IngresoMensualValidado;
-                if (ratio > 5) { score -= 60; logs.Add("Alerta AML: Monto excede capacidad de ingresos."); }
+                if (ratio > 5) { score -= 60; logs.Add("Alerta AML: Monto excede capacidad de ingresos (-60 pts)."); }
             }
 
             if (score < 1) score = 1;
